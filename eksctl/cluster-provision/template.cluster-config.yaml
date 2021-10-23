@@ -1,0 +1,75 @@
+apiVersion: eksctl.io/v1alpha5
+kind: ClusterConfig
+metadata:
+  region: ${AWS_REGION}
+  name: ${CLUSTER_NAME}
+  version: ${K8S_VERSION}
+
+iam:
+  withOIDC: true
+
+vpc:
+  autoAllocateIPv6: false
+  cidr: 10.0.0.0/16
+  clusterEndpoints:
+    privateAccess: false
+    publicAccess: true
+  manageSharedNodeSecurityGroupRules: true
+  nat:
+    gateway: Single # HighlyAvailable / Single / Disable
+
+# https://eksctl.io/usage/eks-private-cluster/
+privateCluster:
+  enabled: false
+
+# https://eksctl.io/usage/cloudwatch-cluster-logging/#clusterconfig-examples
+cloudWatch:
+  clusterLogging:
+    enableTypes:
+      - "api"
+      - "audit"
+      - "authenticator"
+      - "controllerManager"
+      - "scheduler"
+
+# https://eksctl.io/usage/eks-managed-nodes/
+managedNodeGroups:
+  - name: mng-addon
+    privateNetworking: true # https://eksctl.io/usage/vpc-networking/#use-private-subnets-for-initial-nodegroup
+    instanceType: c5.large
+    desiredCapacity: 1
+    minSize: 1
+    maxSize: 30
+    volumesize: 30
+    labels:
+      position: addon
+    tags:
+      nodegroup-role: addon
+    iam:
+      # https://eksctl.io/usage/schema/#managedNodeGroups-iam-withAddonPolicies
+      withAddonPolicies:
+        albIngress: true
+        autoScaler: true
+        certManager: true
+        cloudWatch: true
+        externalDNS: true
+
+  - name: mng-worker
+    privateNetworking: true # https://eksctl.io/usage/vpc-networking/#use-private-subnets-for-initial-nodegroup
+    instanceType: m5.large
+    desiredCapacity: 3
+    minSize: 3
+    maxSize: 450
+    volumesize: 50
+    labels:
+      position: worker
+    tags:
+      nodegroup-role: worker
+    iam:
+      # https://eksctl.io/usage/schema/#managedNodeGroups-iam-withAddonPolicies
+      withAddonPolicies:
+        albIngress: true
+        autoScaler: true
+        certManager: true
+        cloudWatch: true
+        externalDNS: true
