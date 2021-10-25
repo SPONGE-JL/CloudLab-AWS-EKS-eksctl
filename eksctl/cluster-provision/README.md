@@ -119,7 +119,7 @@ cd eksctl/cluster-provision
 
 > _**Notice.**_  
 > _This step takes about 5 minutes._  
-> _It include that delete all things: from the EKS Cluster to the VPC_
+> _It includes that delete all things: from the EKS Cluster to the VPC_
 
 ```bash
 eksctl delete cluster \
