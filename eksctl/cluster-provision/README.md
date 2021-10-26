@@ -84,7 +84,7 @@ cd eksctl/cluster-provision
 4. (Option) Make EKS API Server Endpoint private only:
 
     > _**Notice.**_  
-    > _This step takes about 12 minutes._  
+    > _This step takes about 12 minutes._
 
     ```bash
     eksctl utils update-cluster-endpoints \
@@ -93,8 +93,67 @@ cd eksctl/cluster-provision
       --private-access=true --public-access=false --approve
     ```
 
-    Then, create a new EC2 instance in the VPC where this EKS Cluster is in.  
-    Install prerequistes and access to cluster.
+    - **Prepare bastion EC2 instance**
+
+      Create a new EC2 instance in the VPC where this EKS Cluster is in.  
+      If you choose [AL2(Amazon Linux 2) you can be easy to access with SSM](https://docs.aws.amazon.com/systems-manager/latest/userguide/sysman-install-ssm-agent.html).  
+      Below bash scripts is user-data about SSM Agent to access EC2 Instance without SSH Key-pair.
+
+      ```bash
+      #!/bin/bash
+      # SSM Agent
+      sudo systemctl enable amazon-ssm-agent
+      sudo systemctl start amazon-ssm-agent
+      ```
+
+      If ec2 instance is launched, then you need to install prerequistes and access to cluster.
+
+    - **How can I access to private EKS cluster with authentication on token?**
+
+      1. Check `eks.<region>.amazonaws.com`'s IP address
+
+          ```bash
+          # In bastion EC2 instance located in the VPC where EKS Cluster has been provisioned
+          nslookup eks.ap-northeast-2.amazonaws.com
+          # Like this...
+          # Server:   10.0.0.2
+          # Address:  10.0.0.2#53
+
+          # Non-authoritative answer:
+          # Name: eks.ap-northeast-2.amazonaws.com
+          # Address: 3.35.154.95
+          # Name: eks.ap-northeast-2.amazonaws.com
+          # Address: 3.34.164.51  << Pick with copying
+          ```
+
+      2. Add below line in `/etc/hosts`
+
+          ```bash
+          # Edit with root permission
+          sudo vi /etc/hosts
+          ```
+
+          ```bash
+          # eks.ap-northeast-2.amazonaws.com
+          3.34.164.51  eks.ap-northeast-2.amazonaws.com
+          ```
+
+          ```bash
+          # Check
+          cat vi /etc/hosts
+          ```
+
+      3. Set outbound rule of security group what has been attached to bastion EC2 instance
+
+         | Port range | Protocol  | Destination         | Description                                          |
+         | :--------- | :-------- | :------------------ | :--------------------------------------------------- |
+         | 443        | TCP       | 3.34.164.51 (paste) | AWS CLI / EKS API / eks.ap-northeast-2.amazonaws.com |
+
+      4. Then try to call below command
+
+          - `aws s3 ls`: This command will be pending. Just an example for not allowed outbound traffics.
+          - [`aws eks get-token`](https://awscli.amazonaws.com/v2/documentation/api/latest/reference/eks/get-token.html): This command will response generated token from private cluster. Then you can access with this token.
+          - `kubectl get ns`: check kubernetest authentication is right state.
 
     - Read more: [Managing Access to the Kubernetes API Server Endpoints](https://eksctl.io/usage/vpc-networking/#managing-access-to-the-kubernetes-api-server-endpoints)
 
@@ -117,6 +176,21 @@ cd eksctl/cluster-provision
 
 ### Clean up
 
+#### Uninstall all helm charts
+
+```bash
+# Current Helm Charts
+helm list -A
+
+# Remove All Charts
+helm list -A |grep -v NAME |awk -F" " '{print "helm -n "$2" uninstall "$1}' |xargs -I {} sh -c '{}'
+
+# Check Empty
+helm list -A
+```
+
+#### Delete EKS Cluster
+
 > _**Notice.**_  
 > _This step takes about 5 minutes._  
 > _It includes that delete all things: from the EKS Cluster to the VPC_
@@ -126,3 +200,5 @@ eksctl delete cluster \
   --region=$(yq eval ".metadata.region" cluster-config.yaml) \
   --name=$(yq eval ".metadata.name" cluster-config.yaml)
 ```
+
+The `eksctl` work automatically remove local kube-config data.
